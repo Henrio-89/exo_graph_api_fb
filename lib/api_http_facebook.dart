@@ -1,3 +1,4 @@
+// import 'dart:ffi';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -93,6 +94,70 @@ class ApiHttpFacebook {
             postData['comments'] = null;
           }
 
+          // Récupération des commentaires de chaque publication
+          // final commentsUrl =
+          //     'https://graph.facebook.com/v19.0/${postData['id']}/comments';
+          // final commentsResponse = await http.get(
+          //   Uri.parse(
+          //       '$commentsUrl?fields=from,message,created_time&access_token=$accessToken'),
+          // );
+
+          // if (commentsResponse.statusCode == 200) {
+          //   final commentsData = json.decode(commentsResponse.body);
+          //   final List<dynamic> comments = commentsData['data'];
+
+          //   // Pour chaque commentaire, récupérez également les informations sur l'utilisateur
+          //   for (final comment in comments) {
+          //     final userId = comment['from']['id'];
+          //     final userUrl =
+          //         'https://graph.facebook.com/v19.0/$userId?fields=picture';
+          //     final userResponse = await http
+          //         .get(Uri.parse('$userUrl&access_token=$accessToken'));
+          //     if (userResponse.statusCode == 200) {
+          //       final userData = json.decode(userResponse.body);
+          //       final profilePictureUrl = userData['picture']['data']['url'];
+          //       comment['profile_comment'] = profilePictureUrl;
+          //     } else {
+          //       comment['profile_comment'] =
+          //           null; // ou '' selon votre préférence
+          //     }
+          //   }
+          //   postData['comments'] = comments;
+          // } else {
+          //   postData['comments'] = null;
+          // }
+
+          // print( postData['comments']);
+
+          // Récupération des likes pour chaque publication
+          final likesUrl =
+              'https://graph.facebook.com/v19.0/${postData['id']}?fields=likes.summary(true)';
+          final likesResponse =
+              await http.get(Uri.parse('$likesUrl&access_token=$accessToken'));
+
+          if (likesResponse.statusCode == 200) {
+            final likesData = json.decode(likesResponse.body);
+            postData['likes'] = likesData['likes']['summary']['total_count'];
+            postData['has_liked'] = likesData['likes']['summary']['has_liked'];
+          } else {
+            postData['likes'] = 0; // ou null si vous préférez
+            postData['has_liked'] = false;
+          }
+
+          // Récupération des informations sur l'utilisateur qui a publié
+          final userUrl =
+              'https://graph.facebook.com/v19.0/${pageId}?fields=picture';
+          final userResponse =
+              await http.get(Uri.parse('$userUrl&access_token=$accessToken'));
+          if (userResponse.statusCode == 200) {
+            final userData = json.decode(userResponse.body);
+            final profilePictureUrl = userData['picture']['data']['url'];
+            postData['profile_picture'] = profilePictureUrl;
+          } else {
+            // Gérer l'erreur de récupération de l'image de profil
+            postData['profile_picture'] = null; // ou '' selon votre préférence
+          }
+
           return postData;
         }).toList());
       }
@@ -107,7 +172,10 @@ class ApiHttpFacebook {
             return AlertDialog(
               title: const Text(
                 "HTTP 401 - Unauthorized",
-                style: TextStyle(color: Colors.red,fontSize: 15,fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold),
               ),
               content: const Text(
                 "Erreur d'authentification, le token d'accès est expiré ou invalide.",
@@ -160,6 +228,42 @@ class ApiHttpFacebook {
       );
     } else {
       throw Exception('Échec de la suppression du post.');
+    }
+  }
+
+  Future<void> likePost(String postId, bool likes) async {
+    final graphApiUrl =
+        Uri.parse('https://graph.facebook.com/v19.0/$postId/likes');
+
+    final response = likes
+        ? await http.post(
+            graphApiUrl,
+            headers: {
+              HttpHeaders.authorizationHeader: accessToken,
+              HttpHeaders.acceptHeader: 'application/json',
+              HttpHeaders.contentTypeHeader: 'application/x-www-form-urlencoded'
+            },
+            body: {'access_token': accessToken},
+          )
+        : await http.delete(
+            graphApiUrl,
+            headers: {
+              HttpHeaders.authorizationHeader: accessToken,
+              HttpHeaders.acceptHeader: 'application/json',
+              HttpHeaders.contentTypeHeader: 'application/x-www-form-urlencoded'
+            },
+            body: {'access_token': accessToken},
+          );
+
+    if (response.statusCode == 200) {
+      if (likes) {
+        print('Publication likée avec succès sur Facebook.');
+      } else {
+        print('Publication dislikée avec succès sur Facebook.');
+      }
+    } else {
+      print(
+          'Erreur lors de la manipulation de la publication sur Facebook: ${response.body}');
     }
   }
 }
